@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FBSS Newsletter Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+/* Layout: tabs (Build / Images). Build = editor column + live phone-width preview; stacks on narrow screens */
+:root {
+  --bg:#F3F1EC; --surface:#FFFFFF; --ink:#262B33; --muted:#646B75; --line:#DCD8CF;
+  --slate:#3D4656; --sage:#7E846A; --copper:#A9661F; --ok:#3F7A4E; --err:#A23B2A;
+  --display:"Cormorant Garamond", Georgia, serif;
+  --body:"Source Sans 3", "Segoe UI", Arial, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#1B1D21; --surface:#24272D; --ink:#ECE9E3; --muted:#A7ABB2; --line:#3A3E46;
+          --slate:#9FAEC6; --sage:#AEB596; --copper:#E0A15E; --ok:#7CC08C; --err:#E58A78; color-scheme: dark; }
+}
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 var(--body); }
+.wrap { max-width:1240px; margin:0 auto; padding-block:24px 64px; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); display:grid; gap:18px; }
+header { display:flex; justify-content:space-between; align-items:end; gap:16px; flex-wrap:wrap; }
+.eyebrow { font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--sage); font-weight:700; }
+h1 { font-family:var(--display); font-weight:600; font-size:36px; line-height:1.1; margin:2px 0 0; color:var(--slate); }
+.tabs { display:flex; gap:4px; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:4px; }
+.tabs button { background:transparent; color:var(--muted); border:0; }
+.tabs button[aria-selected="true"] { background:var(--slate); color:var(--surface); }
+.panel { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px; display:grid; gap:12px; }
+.panel h2 { margin:0; font-size:15px; font-weight:700; }
+.panel > p.hint { margin:-6px 0 0; color:var(--muted); font-size:13px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+@media (max-width:560px) { .grid2 { grid-template-columns:1fr; } }
+label { display:grid; gap:3px; font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.02em; min-width:0; }
+input[type=text], input[type=url], textarea, select { font:14px var(--body); padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); min-width:0; width:100%; }
+textarea { resize:vertical; min-height:70px; line-height:1.45; }
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, .drop:focus-visible { outline:2px solid var(--copper); outline-offset:2px; }
+button { font:600 14px var(--body); border-radius:6px; padding:8px 14px; cursor:pointer; border:1px solid var(--slate); background:var(--slate); color:var(--surface); }
+button.ghost { background:transparent; color:var(--slate); }
+button.small { padding:4px 10px; font-size:13px; }
+button.icon { padding:4px 8px; font-size:13px; background:transparent; color:var(--muted); border-color:var(--line); }
+button.danger { color:var(--err); border-color:var(--line); background:transparent; }
+details > summary { cursor:pointer; font-weight:700; font-size:15px; }
+details[open] > summary { margin-bottom:12px; }
+code { font-family:var(--mono); font-size:.9em; background:var(--bg); padding:1px 5px; border-radius:4px; }
+
+/* Build view */
+.build { display:grid; grid-template-columns:minmax(0,1fr) 440px; gap:18px; align-items:start; }
+@media (max-width:980px) { .build { grid-template-columns:1fr; } }
+.editor { display:grid; gap:14px; min-width:0; }
+.preview { position:sticky; top:16px; display:grid; gap:10px; }
+@media (max-width:980px) { .preview { position:static; } }
+.preview-frame { background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.preview iframe { width:100%; height:78vh; border:0; display:block; background:#EDE7DB; }
+.preview-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.section-card { border:1px solid var(--line); border-radius:8px; padding:14px; display:grid; gap:10px; background:var(--bg); }
+.section-card .top { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+.section-card .top strong { font-size:14px; overflow-wrap:anywhere; }
+.section-card .tools { display:flex; gap:4px; }
+.section-card input, .section-card textarea, .section-card select { background:var(--surface); }
+.imgfield { display:grid; grid-template-columns:56px minmax(0,1fr) auto; gap:8px; align-items:end; }
+.imgfield .thumb { width:56px; height:42px; border-radius:4px; object-fit:cover; background:var(--line); border:1px solid var(--line); }
+.glance-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:10px; }
+@media (max-width:560px) { .glance-row { grid-template-columns:1fr; } }
+.glance-card { padding:12px 14px; gap:8px; border-left:4px solid var(--copper); }
+.glance-card.is-empty { border-left-color:var(--line); }
+.glance-card.is-empty .top strong { color:var(--muted); font-weight:600; }
+.row { display:grid; grid-template-columns:1fr 1.4fr auto; gap:8px; align-items:end; }
+@media (max-width:560px) { .row { grid-template-columns:1fr; } }
+
+/* Images view */
+.drop { border:2px dashed var(--line); border-radius:10px; padding:36px 20px; text-align:center; background:var(--surface); cursor:pointer; transition:border-color .15s, background .15s; }
+.drop.over { border-color:var(--copper); background:color-mix(in srgb, var(--copper) 8%, var(--surface)); }
+.drop strong { display:block; font-family:var(--display); font-size:24px; color:var(--slate); font-weight:600; }
+.drop span { color:var(--muted); font-size:14px; }
+.listhead { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
+.listhead h2 { margin:0; font-size:15px; }
+.list { display:grid; gap:12px; }
+.item { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px; display:grid; grid-template-columns:96px minmax(0,1fr); gap:14px; align-items:start; }
+.item img { width:96px; height:72px; object-fit:cover; border-radius:6px; background:var(--bg); }
+.meta { display:grid; gap:8px; min-width:0; }
+.name { font-weight:600; overflow-wrap:anywhere; }
+.status { font-size:13px; color:var(--muted); }
+.status.ok { color:var(--ok); } .status.err { color:var(--err); }
+.url { font-family:var(--mono); font-size:12px; color:var(--muted); background:var(--bg); padding:6px 8px; border-radius:6px; overflow-x:auto; white-space:nowrap; }
+.actions { display:flex; gap:8px; flex-wrap:wrap; }
+.bar { height:4px; background:var(--bg); border-radius:2px; overflow:hidden; }
+.bar i { display:block; height:100%; width:0; background:var(--copper); transition:width .2s; }
+.empty { color:var(--muted); font-size:14px; padding:12px 0; }
+.sync { font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px; justify-content:flex-end; }
+.sync i { width:8px; height:8px; border-radius:50%; background:var(--ok); display:inline-block; }
+.sync.saving i { background:var(--copper); } .sync.error i { background:var(--err); }
+.headright { display:grid; gap:6px; justify-items:end; }
+.banner { border-color:var(--copper); background:color-mix(in srgb, var(--copper) 9%, var(--surface)); }
+.banner p { margin:0; }
+.gate { position:fixed; inset:0; z-index:20; background:var(--bg); display:grid; place-items:center; padding:max(16px, env(safe-area-inset-top,0px)) max(16px, env(safe-area-inset-right,0px)) max(16px, env(safe-area-inset-bottom,0px)) max(16px, env(safe-area-inset-left,0px)); }
+.gate form { width:min(420px, 100%); background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:28px; display:grid; gap:14px; }
+.gate h1 { font-size:32px; }
+.gate p { margin:0; color:var(--muted); }
+input[type=password] { font:14px var(--body); padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); width:100%; }
+.toast { position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:6px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:5; }
+.toast.show { opacity:1; }
+.confirm { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--err); }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">First Baptist Sulphur Springs</div>
+      <h1>Newsletter Studio</h1>
+    </div>
+    <div class="headright">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-build" aria-selected="true">Build newsletter</button>
+        <button type="button" role="tab" id="tab-images" aria-selected="false">Images</button>
+      </div>
+      <div class="sync" id="sync" role="status"><i></i><span id="sync-text">Loading…</span></div>
+    </div>
+  </header>
+
+  <section class="panel banner" id="conflict" hidden>
+    <h2>Someone else changed this draft</h2>
+    <p id="conflict-text">Another person saved changes while you were editing.</p>
+    <div class="actions">
+      <button type="button" id="take-theirs">Load their version</button>
+      <button type="button" class="ghost" id="keep-mine">Keep my version</button>
+    </div>
+  </section>
+
+  <!-- BUILD -->
+  <div id="view-build" class="build">
+    <div class="editor">
+      <section class="panel">
+        <h2>This week</h2>
+        <div class="grid2">
+          <label for="f-date">Date line<input type="text" id="f-date"></label>
+          <label for="f-pre">Inbox preview text<input type="text" id="f-pre"></label>
+        </div>
+        <label for="f-prayer">Prayer callout (leave blank to hide)<textarea id="f-prayer" rows="2"></textarea></label>
+      </section>
+
+      <section class="panel">
+        <h2>Pastor's video</h2>
+        <p class="hint">Leave the link blank to hide this block.</p>
+        <div class="row" style="grid-template-columns:minmax(0,1fr) auto;">
+          <label for="f-vlink">Video link<input type="url" id="f-vlink" placeholder="https://vimeo.com/..."></label>
+          <button type="button" class="ghost small" id="vimeo-pull" style="margin-bottom:4px;">Get thumbnail</button>
+        </div>
+        <div class="status" id="vimeo-status"></div>
+        <div id="f-vimg"></div>
+      </section>
+
+      <section class="panel">
+        <h2>This week at a glance</h2>
+        <p class="hint">Up to four items. Empty items are left out of the email.</p>
+        <div id="glance" style="display:grid;gap:10px;"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Quick links</h2>
+        <p class="hint">Shown just below "This Week at a Glance."</p>
+        <div id="quick" style="display:grid;gap:8px;"></div>
+      </section>
+
+      <section class="panel">
+        <div class="listhead"><h2>Announcements</h2><button type="button" class="small" id="add-sec">Add announcement</button></div>
+        <div id="sections" style="display:grid;gap:12px;"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Pastor's blog</h2>
+        <p class="hint">Paste the post link and the image, title and excerpt fill in. Leave the title blank to hide this block.</p>
+        <div class="row" style="grid-template-columns:minmax(0,1fr) auto;">
+          <label for="f-blink">Post link<input type="url" id="f-blink" placeholder="https://jeffgravens.com/..."></label>
+          <button type="button" class="ghost small" id="blog-pull" style="margin-bottom:4px;">Get from post</button>
+        </div>
+        <div class="status" id="blog-status"></div>
+        <label for="f-btitle">Post title<input type="text" id="f-btitle"></label>
+        <label for="f-bbody">Excerpt<textarea id="f-bbody" rows="4"></textarea></label>
+        <div id="f-bimg"></div>
+      </section>
+
+      <section class="panel">
+        <details>
+          <summary>Every-week items (logo, Watch &amp; Give, footer)</summary>
+          <div style="display:grid;gap:12px;">
+            <div id="f-logo"></div>
+            <div class="grid2">
+              <label for="f-wtitle">Watch headline<input type="text" id="f-wtitle"></label>
+              <label for="f-wlink">Sermons link<input type="url" id="f-wlink"></label>
+            </div>
+            <label for="f-wtext">Watch text<input type="text" id="f-wtext"></label>
+            <div class="grid2">
+              <label for="f-gtitle">Give headline<input type="text" id="f-gtitle"></label>
+              <label for="f-glink">Giving link<input type="url" id="f-glink"></label>
+            </div>
+            <label for="f-gtext">Give text<input type="text" id="f-gtext"></label>
+            <div id="f-flogo"></div>
+            <label for="f-addr">Footer address<input type="text" id="f-addr"></label>
+            <label for="f-unsub">Unsubscribe link (if your sending tool needs a placeholder, put it here)<input type="text" id="f-unsub" placeholder="e.g. {{unsubscribe_url}}"></label>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel">
+        <h2>Start over</h2>
+        <p class="hint">Changes save automatically, and everyone on staff works on the same draft.</p>
+        <div class="actions" id="reset-area">
+          <button type="button" class="ghost" id="new-week">Start next week</button>
+          <button type="button" class="danger" id="reset-sample">Reset to sample</button>
+        </div>
+      </section>
+    </div>
+
+    <aside class="preview">
+      <div class="preview-actions">
+        <button type="button" id="copy-html">Copy email HTML</button>
+        <button type="button" class="ghost" id="save-html">Save .html file</button>
+      </div>
+      <div class="preview-frame"><iframe id="frame" title="Newsletter preview"></iframe></div>
+    </aside>
+  </div>
+
+  <!-- IMAGES -->
+  <div id="view-images" hidden style="display:grid;gap:18px;max-width:760px;">
+    <section class="panel" id="settings">
+      <h2>Cloudinary</h2>
+      <p class="status" id="cloud-status" style="margin:0;">Checking the connection…</p>
+    </section>
+
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose images to upload">
+      <strong>Drop images here</strong>
+      <span>or click to choose files · JPG, PNG or GIF</span>
+    </div>
+    <input type="file" id="file" accept="image/*" multiple hidden>
+
+    <section style="display:grid;gap:12px;">
+      <div class="listhead"><h2>Uploaded images</h2><button class="ghost small" id="clear" type="button">Clear list</button></div>
+      <div class="list" id="list"></div>
+    </section>
+  </div>
+</div>
+<div class="gate" id="gate" hidden>
+  <form id="gate-form" autocomplete="on">
+    <div>
+      <div class="eyebrow">First Baptist Sulphur Springs</div>
+      <h1>Newsletter Studio</h1>
+    </div>
+    <p>Enter the staff password to open the shared newsletter draft.</p>
+    <label for="gate-pass">Staff password<input type="password" id="gate-pass" autocomplete="current-password" required></label>
+    <label for="gate-name">Your first name (shows who saved last)<input type="text" id="gate-name" autocomplete="given-name"></label>
+    <p class="status err" id="gate-error" style="color:var(--err);"></p>
+    <button type="submit" id="gate-submit">Open studio</button>
+  </form>
+</div>
+<input type="file" id="field-file" accept="image/*" hidden>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  const CC = "https://files.constantcontact.com/98465c81401/";
+
+  const SAMPLE = {
+    date: "October 27, 2026",
+    pre: "Trunk or Treat is Saturday, Harvest Day is Sunday, and taco soup is on the menu Wednesday night.",
+    prayer: "Be in prayer for Trunk or Treat this Saturday, that every family who comes to the ballfield would feel welcomed and loved.",
+    video: { link: "https://vimeo.com/1239955532", image: "https://i.vimeocdn.com/filter/overlay?src0=https%3A%2F%2Fi.vimeocdn.com%2Fvideo%2F2217641602-b4e555af6a8a2dc2adf6e6850adc29826fed071cf5dea5d814a5941a25994bb2-d_1920x1080%3F%26region%3Dus&src1=http%3A%2F%2Ff.vimeocdn.com%2Fp%2Fimages%2Fcrawler_play.png" },
+    glance: [ { when: "Wed · 4:45 PM", what: "Fellowship Meal" }, { when: "Sat, Oct 31 · 6 PM", what: "Trunk or Treat" }, { when: "Sun, Nov 1", what: "Harvest Day" }, { when: "", what: "" } ],
+    sections: [
+      { style: "standard", eyebrow: "Saturday, October 31 · 6:00–8:00 PM · The Ballfield", title: "Trunk or Treat", body: "Help us make it a great night! Pick up some candy and drop it off at any church entrance.", image: CC + "3da50db0-ded8-4507-ba07-b352877e6d4b.png?rdr=true", button: "", link: "" },
+      { style: "standard", eyebrow: "This Sunday, November 1", title: "Harvest Day", body: "Pray about what the Lord is leading you to give as we celebrate God's blessings and support missions and Kingdom work around the world.\n\nOur goal: $300,000", image: CC + "263b890a-2e30-4399-8afa-e834cc71c1c1.jpg?rdr=true", button: "Give Here", link: "https://onrealm.org/fbss/give/harvestday" },
+      { style: "standard", eyebrow: "Wednesday · 4:45 PM · Fellowship Hall", title: "Wednesday Night Fellowship Meal", body: "See you on Wednesday night! Join us for the meal in the Fellowship Hall.\n\nOn the menu: taco soup with cheese and sour cream, chips or cornbread, and dessert.", image: CC + "3ab6885d-1879-42f0-9ce2-9431d4f86785.jpg?rdr=true", button: "", link: "" },
+      { style: "standard", eyebrow: "Registration Open · K–5th Grade", title: "Upward Basketball & Cheer", body: "If your young athletes are in Kindergarten through 5th grade and love basketball or cheer, sign them up today!", image: CC + "e0ef8829-8a96-4d4b-9a6d-5dc9580448c7.png?rdr=true", button: "Sign Up Here", link: "https://www.fbss.church/upward" },
+      { style: "highlight", eyebrow: "Weekday Devotional", title: "Join SING", body: "Each weekday, get a short devotional that keeps you connected in Scripture and song. Text FBSS to 79316 to sign up!", image: CC + "c4348cc7-b788-455a-b61e-dbdf38424f0f.jpg?rdr=true", button: "", link: "" }
+    ],
+    blog: { title: "A Letter to Those Trusting Jesus", link: "https://jeffgravens.com/2026/10/27/a-letter-to-those-trusting-jesus/", body: "Here's a piece of a project titled Our Hope Springs Eternal: Letters for Life and Death. I'm writing letters to a man named Russ through all the stages of the Christian faith. Here's a draft of the second letter.", image: "https://i0.wp.com/jeffgravens.com/wp-content/uploads/2026/10/our-hope-springs-eternal_-letters-for-life-and-death-sermon-design-finals-high-definition-title-slide-e383bb-1920-x-108.jpg?fit=1040%2C585&ssl=1" },
+    logo: CC + "3899d2fa-2558-4d9c-93ab-379596696073.png?rdr=true",
+    footerLogo: CC + "28b44657-b13f-401e-a1c8-f3e4024892c7.png?rdr=true",
+    watch: { title: "Catch up on Sunday", link: "https://www.fbss.church/sermons", text: "Missed a sermon? Watch the latest messages anytime on our website.", image: CC + "3b8750a4-261c-4382-8e17-cb9d261b5bac.jpg?rdr=true" },
+    give: { title: "Give online", link: "https://onrealm.org/fbss/-/form/give/general", text: "Give once or set up a recurring gift in minutes on our secure platform.", image: CC + "82f0c91c-3201-4324-8903-1df59ce31464.jpg?rdr=true" },
+    quick: [
+      { label: "Birthdays", link: "https://docs.google.com/document/d/1wkM0JICbTlvqjj_Hkxuho_Se_58eZ1J6O1O8JHk_R4I/edit?tab=t.0", color: "#3D4656" },
+      { label: "Calendar", link: "https://app.espace.cool/ClientApi/Monthly/15846?view=a&calendarId=821", color: "#7E846A" },
+      { label: "Prayer Page", link: "https://docs.google.com/document/d/1Sv0pYmJmRavQ-mBSw0mlXq1YRCGRgi12v_blJ-3iKVk/mobilebasic", color: "#8A3E2B" }
+    ],
+    addr: "116 Oak Ave · Sulphur Springs, TX 75482",
+    unsub: ""
+  };
+
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  function normalize(d) {
+    d = d && typeof d === "object" ? d : clone(SAMPLE);
+    for (const k of Object.keys(SAMPLE)) if (d[k] === undefined) d[k] = clone(SAMPLE[k]);
+    if (d.watch.title === undefined) { d.watch.title = SAMPLE.watch.title; d.watch.text = SAMPLE.watch.text; }
+    if (d.give.title === undefined) d.give.title = SAMPLE.give.title;
+    return d;
+  }
+  let D = clone(SAMPLE);
+
+  /* ---------- Shared draft (server) ---------- */
+  let key = store.get("fbss.key", ""), who = store.get("fbss.name", "");
+  let version = 0, dirty = false, inflight = false, pushTimer = null, retryTimer = null, pendingTheirs = null, cloudReady = false, started = false;
+  class AuthError extends Error {}
+  async function api(path, opts) {
+    opts = opts || {};
+    const r = await fetch(path, { method: opts.method || "GET", headers: { "content-type": "application/json", "x-studio-key": key }, body: opts.body ? JSON.stringify(opts.body) : undefined, cache: "no-store" });
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    if (r.status === 401) throw new AuthError(j.error || "That password isn't right.");
+    if (r.status === 409) return Object.assign({ conflict: true }, j);
+    if (!r.ok) throw new Error(j.error || "The studio server didn't respond. Try again in a moment.");
+    return j;
+  }
+  const timeStr = (iso) => { try { return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch (e) { return ""; } };
+  function setSync(state, text) { const el = $("sync"); el.className = "sync " + state; $("sync-text").textContent = text; }
+  function savedText(at, by) { return at ? "Saved " + timeStr(at) + (by ? " by " + by : "") : "All changes saved"; }
+
+  const save = () => {
+    schedulePreview(); dirty = true; setSync("saving", "Unsaved changes…");
+    clearTimeout(pushTimer); pushTimer = setTimeout(push, 1200);
+  };
+  async function push(force) {
+    if (inflight) { clearTimeout(pushTimer); pushTimer = setTimeout(push, 600); return; }
+    if (!dirty && !force) return;
+    inflight = true; dirty = false; clearTimeout(retryTimer);
+    setSync("saving", "Saving…");
+    try {
+      const r = await api("/api/draft", { method: "PUT", body: { draft: D, baseVersion: version, by: who, force: !!force } });
+      if (r.conflict) { dirty = true; showConflict(r); }
+      else { version = r.version; if (!dirty) setSync("", savedText(r.savedAt, who)); }
+    } catch (e) {
+      dirty = true;
+      if (e instanceof AuthError) { lock(e.message); }
+      else { setSync("error", "Not saved. Retrying…"); retryTimer = setTimeout(push, 5000); }
+    } finally { inflight = false; if (dirty && !pendingTheirs) { clearTimeout(pushTimer); pushTimer = setTimeout(push, 1200); } }
+  }
+  function showConflict(theirs) {
+    pendingTheirs = theirs; clearTimeout(pushTimer);
+    $("conflict-text").textContent = (theirs.savedBy ? theirs.savedBy : "Someone else") + " saved changes" + (theirs.savedAt ? " at " + timeStr(theirs.savedAt) : "") + " while you were editing. Load their version, or keep yours and replace theirs.";
+    $("conflict").hidden = false; setSync("error", "Not saved: draft changed");
+    $("conflict").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  $("take-theirs").onclick = () => {
+    const t = pendingTheirs; pendingTheirs = null; $("conflict").hidden = true; dirty = false;
+    applyServer(t); toast("Loaded the latest version");
+  };
+  $("keep-mine").onclick = () => { pendingTheirs = null; $("conflict").hidden = true; dirty = true; push(true); };
+  function applyServer(st) {
+    version = st.version || 0; D = normalize(st.draft ? clone(st.draft) : null);
+    if (started) { bindAll(); schedulePreview(); }
+    setSync("", savedText(st.savedAt, st.savedBy));
+  }
+  async function poll() {
+    if (!started || inflight || dirty || pendingTheirs || document.hidden) return;
+    try {
+      const st = await api("/api/state");
+      history = st.images || []; renderHistory();
+      if ((st.version || 0) > version) {
+        const ae = document.activeElement;
+        if (ae && $("view-build").contains(ae) && /INPUT|TEXTAREA|SELECT/.test(ae.tagName)) return;
+        applyServer(st); toast((st.savedBy || "Someone") + " updated the draft");
+      }
+    } catch (e) { if (e instanceof AuthError) lock(e.message); }
+  }
+  setInterval(poll, 15000);
+  window.addEventListener("focus", poll);
+  window.addEventListener("beforeunload", (e) => { if (dirty || inflight) { e.preventDefault(); e.returnValue = ""; } });
+
+  /* ---------- Email HTML generator ---------- */
+  const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const F = "font-family:Arial,Helvetica,sans-serif;";
+  const SERIF = "font-family:Georgia,'Times New Roman',serif;";
+  const paras = (txt, style) => String(txt || "").trim().split(/\n\s*\n/).filter(Boolean)
+    .map((p, i, a) => '<p class="text" style="margin:0 0 ' + (i === a.length - 1 ? 0 : 12) + 'px;' + style + '">' + esc(p).replace(/\n/g, "<br>") + "</p>").join("\n");
+  const img = (src, alt, href, w, radius, bg) => {
+    if (!src) return "";
+    const tag = '<img src="' + esc(src) + '" width="' + w + '" alt="' + esc(alt) + '" style="width:100%;max-width:' + w + 'px;border-radius:' + radius + ';background:' + bg + ';display:block;border:0;height:auto;">';
+    return href ? '<a href="' + esc(href) + '">' + tag + "</a>" : tag;
+  };
+  const btn = (label, href, bg, color, border) => (!label || !href) ? "" :
+    '<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:' + bg + ';border-radius:6px;' + (border || "") + '"><a href="' + esc(href) + '" style="display:inline-block;padding:13px 26px;' + F + 'font-size:15px;font-weight:bold;color:' + color + ';text-decoration:none;">' + esc(label) + "</a></td></tr></table>";
+  const eyebrow = (t, c) => t ? '<p style="margin:0 0 6px;' + F + 'font-size:12px;letter-spacing:2px;text-transform:uppercase;color:' + c + ';font-weight:bold;">' + esc(t) + "</p>" : "";
+  const divider = '<tr><td class="card px" style="background:#FFFFFF;padding:0 40px;"><div style="border-top:1px solid #E4DCCB;font-size:0;line-height:0;">&nbsp;</div></td></tr>';
+  const spacer = '<tr><td style="height:16px;line-height:16px;font-size:0;">&nbsp;</td></tr>';
+
+  function sectionHTML(s) {
+    if (s.style === "highlight") {
+      return '<tr><td class="card px" style="background:#FFFFFF;padding:30px 40px 34px;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#3D4656;border-radius:8px;">' +
+        (s.image ? '<tr><td style="padding:0;">' + img(s.image, s.title, s.link, 520, "8px 8px 0 0", "#3D4656") + "</td></tr>" : "") +
+        '<tr><td style="padding:22px 26px 24px;' + F + '">' + eyebrow(s.eyebrow, "#E0B27A") +
+        (s.title ? '<h2 style="margin:0 0 10px;' + SERIF + 'font-size:23px;color:#FFFFFF;font-weight:normal;">' + esc(s.title) + "</h2>" : "") +
+        paras(s.body, F + "font-size:15px;line-height:1.6;color:#D7DBE2;").replace(/class="text" /g, "") +
+        (s.button && s.link ? '<div style="height:18px;line-height:18px;font-size:0;">&nbsp;</div>' + btn(s.button, s.link, "#B8742A", "#FFFFFF") : "") +
+        "</td></tr></table></td></tr>";
+    }
+    return '<tr><td class="card px" style="background:#FFFFFF;padding:30px 40px 34px;">' +
+      (s.image ? img(s.image, s.title, s.link, 520, "8px", "#D9D4CA") + '<div style="height:22px;line-height:22px;font-size:0;">&nbsp;</div>' : "") +
+      eyebrow(s.eyebrow, "#B8742A") +
+      (s.title ? '<h2 class="head" style="margin:0 0 12px;' + SERIF + 'font-size:25px;line-height:1.2;color:#3D4656;font-weight:normal;">' + esc(s.title) + "</h2>" : "") +
+      paras(s.body, F + "font-size:16px;line-height:1.6;color:#2E2A24;") +
+      (s.button && s.link ? '<div style="height:20px;line-height:20px;font-size:0;">&nbsp;</div>' + btn(s.button, s.link, "#B8742A", "#FFFFFF") : "") +
+      "</td></tr>";
+  }
+
+  function buildEmail(d) {
+    const g = (d.glance || []).filter((x) => x.what || x.when);
+    const gw = g.length ? Math.floor(100 / g.length) : 100;
+    const glance = !g.length ? "" :
+      '<tr><td class="card px" style="background:#FFFFFF;padding:0 40px 34px;">' +
+      '<p style="margin:0 0 12px;' + F + 'font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7E846A;font-weight:bold;">This Week at a Glance</p>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="glance" style="border:1px solid #E4DCCB;border-radius:8px;"><tr>' +
+      g.map((x, i) => '<td' + (i === 0 ? ' class="first"' : "") + ' width="' + gw + '%" valign="top" style="padding:14px;' + (i ? "border-left:1px solid #E4DCCB;" : "") + F + '">' +
+        '<p style="margin:0;font-size:12px;color:#B8742A;font-weight:bold;text-transform:uppercase;">' + esc(x.when) + "</p>" +
+        '<p class="text" style="margin:4px 0 0;font-size:15px;color:#2E2A24;font-weight:bold;">' + esc(x.what) + "</p></td>").join("") +
+      "</tr></table></td></tr>";
+
+    const secs = (d.sections || []).filter((s) => s.title || s.body || s.image);
+    const secHTML = secs.map(sectionHTML).join("\n" + divider + "\n");
+
+    const b = d.blog || {};
+    const blog = !b.title ? "" : spacer +
+      '<tr><td class="card px" style="background:#FFFFFF;border-radius:10px;padding:30px 40px 34px;">' +
+      '<p style="margin:0 0 14px;' + F + 'font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7E846A;font-weight:bold;">From the Pastor\'s Blog</p>' +
+      (b.image ? img(b.image, b.title, b.link, 520, "8px", "#2F3A52") : "") +
+      '<h2 class="head" style="margin:20px 0 10px;' + SERIF + 'font-size:24px;color:#3D4656;font-weight:normal;">' + esc(b.title) + "</h2>" +
+      paras(b.body, F + "font-size:16px;line-height:1.6;color:#2E2A24;") +
+      (b.link ? '<div style="height:20px;line-height:20px;font-size:0;">&nbsp;</div>' + btn("Read More", b.link, "transparent", "#3D4656", "border:2px solid #3D4656;") : "") +
+      "</td></tr>";
+
+    const col = (t, label, cta, side) => !t.link ? "" :
+      '<td class="stack' + (side === "l" ? " band-l" : " band-r") + '" width="50%" valign="top" style="padding:' + (side === "l" ? "0 24px 0 0" : "0 0 0 24px") + ';' + (side === "l" ? "border-right:1px solid #56607A;" : "") + F + '">' +
+      '<p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#E0B27A;font-weight:bold;">' + label + '</p>' +
+      '<h2 style="margin:0 0 8px;' + SERIF + 'font-size:23px;line-height:1.2;color:#FFFFFF;font-weight:normal;">' + esc(t.title || label) + '</h2>' +
+      '<p style="margin:0 0 18px;font-size:15px;line-height:1.55;color:#D7DBE2;">' + esc(t.text) + '</p>' +
+      '<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border:2px solid #E0B27A;border-radius:6px;"><a href="' + esc(t.link) + '" style="display:inline-block;padding:10px 20px;' + F + 'font-size:14px;font-weight:bold;color:#FFFFFF;text-decoration:none;">' + cta + ' &rarr;</a></td></tr></table></td>';
+    const both = d.watch.link && d.give.link;
+    const tiles = (d.watch.link || d.give.link) ? spacer +
+      '<tr><td style="background:#3D4656;border-radius:10px;padding:32px 36px;" class="px">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' +
+      (both ? col(d.watch, "Sermons", "Watch Now", "l") + col(d.give, "Giving", "Give Now", "r")
+            : col(d.watch.link ? d.watch : d.give, d.watch.link ? "Sermons" : "Giving", d.watch.link ? "Watch Now" : "Give Now", "r").replace("padding:0 0 0 24px", "padding:0")) +
+      '</tr></table></td></tr>' : "";
+
+    const q = (d.quick || []).filter((x) => x.label && x.link);
+    const qw = q.length ? Math.floor(100 / q.length) : 100;
+    const quick = !q.length ? "" : '<tr><td class="card px" style="background:#FFFFFF;padding:0 40px 32px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="quick"><tr>' +
+      q.map((x, i) => '<td width="' + qw + '%" align="center" style="padding:0 ' + (i === q.length - 1 ? 0 : 5) + 'px 0 ' + (i === 0 ? 0 : 5) + 'px;"><a href="' + esc(x.link) + '" style="display:block;padding:18px 10px;background:' + esc(x.color || "#3D4656") + ';border-radius:8px;' + F + 'font-size:17px;font-weight:bold;color:#FFFFFF;text-decoration:none;text-align:center;">' + esc(x.label) + "</a></td>").join("") +
+      "</tr></table></td></tr>";
+
+    const prayer = !d.prayer ? "" :
+      '<tr><td class="card px" style="background:#FFFFFF;padding:22px 40px 30px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F6F2EA;border-left:4px solid #B8742A;border-radius:6px;"><tr><td style="padding:16px 20px;' + SERIF + 'font-size:17px;line-height:1.5;color:#3D4656;font-style:italic;">' + esc(d.prayer) + "</td></tr></table></td></tr>";
+
+    const video = !d.video.link ? "" :
+      '<tr><td class="card px" style="background:#FFFFFF;padding:20px 40px 10px;">' + img(d.video.image, "Watch this week's video update", d.video.link, 520, "8px", "#3D4656") +
+      '<p class="muted" style="margin:10px 0 0;' + F + 'font-size:14px;color:#6B6558;text-align:center;"><a href="' + esc(d.video.link) + '" style="color:#6B6558;">Tap to watch this week\'s update from Pastor</a></p></td></tr>';
+
+    return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Weekly Update – ${esc(d.date)}</title>
+<style>
+  body { margin:0; padding:0; width:100% !important; background:#EDE7DB; }
+  table { border-collapse:collapse; }
+  img { border:0; display:block; outline:none; text-decoration:none; height:auto; }
+  a { color:#B8742A; }
+  @media screen and (max-width:620px) {
+    .container { width:100% !important; }
+    .px { padding-left:22px !important; padding-right:22px !important; }
+    .stack { display:block !important; width:100% !important; padding-left:0 !important; padding-right:0 !important; }
+    .stack-pad { padding-bottom:16px !important; }
+    .h1 { font-size:30px !important; }
+    .glance td { display:block !important; width:100% !important; box-sizing:border-box !important; border-left:0 !important; border-top:1px solid #E4DCCB !important; }
+    .glance td.first { border-top:0 !important; }
+    .band-l { border-right:0 !important; border-bottom:1px solid #56607A !important; padding:0 0 24px 0 !important; }
+    .band-r { padding:24px 0 0 0 !important; }
+    .quick td { display:block !important; width:100% !important; padding:0 0 10px 0 !important; box-sizing:border-box !important; }
+  }
+  @media (prefers-color-scheme: dark) {
+    .bg-outer { background:#1E1C19 !important; }
+    .card { background:#2A2723 !important; }
+    .text { color:#E8E2D6 !important; }
+    .muted { color:#B9B1A2 !important; }
+    .head { color:#F2ECE0 !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#EDE7DB;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(d.pre)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg-outer" style="background:#EDE7DB;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="container" style="width:600px;max-width:600px;">
+<tr><td style="background:#FFFFFF;border-radius:10px 10px 0 0;padding:30px 40px 24px;" align="center">${img(d.logo, "First Baptist Sulphur Springs", "https://www.fbss.church", 380, "0", "#FFFFFF")}</td></tr>
+<tr><td style="font-size:0;line-height:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="33%" style="height:5px;background:#3D4656;"></td><td width="34%" style="height:5px;background:#7E846A;"></td><td width="33%" style="height:5px;background:#B8742A;"></td></tr></table></td></tr>
+<tr><td class="card px" style="background:#FFFFFF;padding:30px 40px 10px;" align="center">
+<p style="margin:0 0 6px;${F}font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#7E846A;font-weight:bold;">${esc(d.date)}</p>
+<h1 class="h1 head" style="margin:0;${SERIF}font-size:36px;line-height:1.15;color:#3D4656;font-weight:normal;">Weekly Update</h1>
+</td></tr>
+${video}
+${prayer}
+${glance || '<tr><td class="card" style="background:#FFFFFF;height:20px;font-size:0;">&nbsp;</td></tr>'}
+${quick}
+<tr><td class="card" style="background:#FFFFFF;border-radius:0 0 10px 10px;height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+${secs.length ? spacer + '\n<tr><td class="card" style="background:#FFFFFF;border-radius:10px 10px 0 0;height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>\n' + secHTML + '\n<tr><td class="card" style="background:#FFFFFF;border-radius:0 0 10px 10px;height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>' : ""}
+${blog}
+${tiles}
+<tr><td align="center" style="padding:24px 20px 10px;${F}">
+${d.footerLogo ? '<img src="' + esc(d.footerLogo) + '" width="200" alt="First Baptist Sulphur Springs" style="width:200px;max-width:60%;margin:0 auto 14px;display:block;border:0;height:auto;">' : ""}
+<p class="muted" style="margin:0;font-size:13px;line-height:1.7;color:#6B6558;">${esc(d.addr)}<br><a href="https://www.fbss.church" style="color:#6B6558;">fbss.church</a> · <a href="tel:9038850646" style="color:#6B6558;">903.885.0646</a></p>
+${d.unsub ? '<p style="margin:12px 0 0;font-size:12px;"><a href="' + esc(d.unsub) + '" style="color:#6B6558;">Unsubscribe</a></p>' : ""}
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+  }
+
+  /* ---------- Preview ---------- */
+  let pvTimer;
+  function schedulePreview() { clearTimeout(pvTimer); pvTimer = setTimeout(() => { $("frame").srcdoc = buildEmail(D); }, 250); }
+
+  /* ---------- Toast & copy ---------- */
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1900); }
+  async function copy(text, label) {
+    try { await navigator.clipboard.writeText(text); toast(label + " copied"); }
+    catch (e) {
+      const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); toast(label + " copied"); } catch (_) { toast("Couldn't copy. Use Save .html file instead."); }
+      ta.remove();
+    }
+  }
+
+  /* ---------- Cloudinary upload (signed by the studio server) ---------- */
+  let history = [];
+  const emailUrl = (u) => u.replace("/image/upload/", "/image/upload/w_1200,c_limit,q_auto/");
+  const thumbUrl = (u) => u.replace("/image/upload/", "/image/upload/w_200,h_150,c_fill,q_auto/");
+  const hasCloud = () => cloudReady;
+  async function uploadFile(file, onProgress, label) {
+    if (!cloudReady) throw new Error("Cloudinary isn't connected to the studio yet. Ask whoever set up the studio to add the Cloudinary settings in Netlify.");
+    const sig = await api("/api/sign", { method: "POST", body: {} });
+    const res = await new Promise((resolve, reject) => {
+      const fd = new FormData();
+      fd.append("file", file); fd.append("api_key", sig.apiKey); fd.append("timestamp", sig.timestamp);
+      fd.append("signature", sig.signature); fd.append("folder", sig.folder);
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "https://api.cloudinary.com/v1_1/" + encodeURIComponent(sig.cloudName) + "/image/upload");
+      xhr.upload.onprogress = (ev) => { if (ev.lengthComputable && onProgress) onProgress(Math.round(ev.loaded / ev.total * 100)); };
+      xhr.onload = () => {
+        let r = {}; try { r = JSON.parse(xhr.responseText); } catch (e) {}
+        if (xhr.status >= 200 && xhr.status < 300 && r.secure_url) resolve(r);
+        else {
+          const msg = (r.error && r.error.message) || "";
+          reject(new Error(/signature|api_key|api key/i.test(msg) ? "Cloudinary rejected the studio's credentials. Check the Cloudinary API key and secret in Netlify." : "Upload failed" + (msg ? ": " + msg : ". Check your connection and try again.")));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Couldn't reach Cloudinary. Check your internet connection and try again."));
+      xhr.send(fd);
+    });
+    const done = { name: label || file.name || "image", url: emailUrl(res.secure_url), thumb: thumbUrl(res.secure_url), width: res.width, height: res.height };
+    try { const r = await api("/api/images", { method: "POST", body: done }); history = r.images || history; } catch (e) { history.unshift(done); }
+    renderHistory();
+    return done;
+  }
+
+  /* ---------- Image field widget ---------- */
+  const fieldFile = $("field-file"); let fieldTarget = null;
+  fieldFile.addEventListener("change", async () => {
+    const f = fieldFile.files[0]; fieldFile.value = ""; if (!f || !fieldTarget) return;
+    const t = fieldTarget; t.status.textContent = "Uploading…";
+    try { const r = await uploadFile(f, (p) => { t.status.textContent = "Uploading… " + p + "%"; }); t.set(r.url); t.status.textContent = "Uploaded"; toast("Image uploaded"); }
+    catch (e) { t.status.textContent = e.message; t.status.style.color = "var(--err)"; }
+  });
+  function imageField(container, labelText, get, set, idKey) {
+    container.innerHTML = "";
+    const wrap = document.createElement("div"); wrap.className = "imgfield";
+    const th = document.createElement("img"); th.className = "thumb"; th.alt = "";
+    const lab = document.createElement("label"); lab.htmlFor = "img-" + idKey; lab.textContent = labelText;
+    const inp = document.createElement("input"); inp.type = "url"; inp.id = "img-" + idKey; inp.placeholder = "Paste an image link or upload";
+    lab.appendChild(inp);
+    const up = document.createElement("button"); up.type = "button"; up.className = "ghost small"; up.textContent = "Upload";
+    const status = document.createElement("div"); status.className = "status"; status.style.gridColumn = "2 / -1";
+    const apply = (v) => { th.src = v || ""; th.style.visibility = v ? "visible" : "hidden"; };
+    inp.value = get() || ""; apply(inp.value);
+    inp.addEventListener("input", () => { set(inp.value.trim()); apply(inp.value.trim()); save(); });
+    up.addEventListener("click", () => {
+      status.style.color = ""; status.textContent = "";
+      fieldTarget = { status, set: (v) => { inp.value = v; set(v); apply(v); save(); } };
+      fieldFile.click();
+    });
+    wrap.append(th, lab, up, status);
+    container.appendChild(wrap);
+  }
+
+  /* ---------- Copy an outside image into Cloudinary ---------- */
+  async function keepInCloudinary(url, label, st) {
+    if (!hasCloud()) return { url, copied: false, why: "Cloudinary isn't connected to the studio yet, so the original link is used." };
+    st.textContent = "Saving a copy to Cloudinary…";
+    try { const r = await uploadFile(url, null, label); return { url: r.url, copied: true }; }
+    catch (e) { return { url, copied: false, why: "Couldn't copy it to Cloudinary (" + e.message.replace(/\.$/, "") + "), so the original link is used." }; }
+  }
+  const okMsg = (st, main, res) => {
+    st.textContent = main + (res.copied ? " Saved to Cloudinary." : res.why ? " " + res.why : "");
+    st.style.color = res.copied || !res.why ? "var(--ok)" : "var(--muted)";
+  };
+
+  /* ---------- Vimeo thumbnail ---------- */
+  let vimeoTimer, vimeoLast = "";
+  const isVimeo = (u) => /^https?:\/\/(www\.|player\.)?vimeo\.com\/.+/i.test(u || "");
+  function scheduleVimeo() {
+    clearTimeout(vimeoTimer);
+    vimeoTimer = setTimeout(() => { if (isVimeo(D.video.link) && D.video.link !== vimeoLast) pullVimeo(); }, 700);
+  }
+  async function pullVimeo() {
+    const link = (D.video.link || "").trim(), st = $("vimeo-status");
+    st.style.color = "";
+    if (!isVimeo(link)) { st.textContent = "Paste a Vimeo link first (for example https://vimeo.com/123456789)."; st.style.color = "var(--err)"; return; }
+    vimeoLast = link; st.textContent = "Getting the thumbnail from Vimeo…";
+    try {
+      const r = await fetch("https://vimeo.com/api/oembed.json?width=1280&url=" + encodeURIComponent(link));
+      if (r.status === 403 || r.status === 404) throw new Error(r.status === 404
+        ? "Vimeo couldn't find that video. Check the link."
+        : "Vimeo won't share this video's thumbnail because of its privacy setting. Set it to Public or Unlisted, or upload a thumbnail below.");
+      if (!r.ok) throw new Error("Vimeo didn't respond. Try again, or upload a thumbnail below.");
+      const j = await r.json();
+      const thumb = j.thumbnail_url_with_play_button || j.thumbnail_url;
+      if (!thumb) throw new Error("This video doesn't have a thumbnail yet. Try again once Vimeo finishes processing it.");
+      const res = await keepInCloudinary(thumb, "Vimeo: " + (j.title || link), st);
+      if ((D.video.link || "").trim() !== link) return;
+      D.video.image = res.url;
+      imageField($("f-vimg"), "Video thumbnail image", () => D.video.image, (v) => D.video.image = v, "video");
+      save();
+      okMsg(st, "Thumbnail added" + (j.title ? " for \u201c" + j.title + "\u201d" : "") + ".", res);
+    } catch (e) {
+      vimeoLast = "";
+      st.textContent = e.message && !/fetch/i.test(e.message) ? e.message : "Couldn't reach Vimeo. Check your internet connection and try again.";
+      st.style.color = "var(--err)";
+    }
+  }
+  $("vimeo-pull").addEventListener("click", pullVimeo);
+
+  /* ---------- Blog post (WordPress) ---------- */
+  let blogTimer, blogLast = "";
+  const plain = (html) => {
+    const t = new DOMParser().parseFromString("<body>" + (html || "") + "</body>", "text/html").body.textContent || "";
+    return t.replace(/\s+/g, " ").replace(/\s*(\[(…|&hellip;|\.\.\.)\]|Continue reading.*|Read more.*)$/i, "").trim();
+  };
+  function scheduleBlog() {
+    clearTimeout(blogTimer);
+    blogTimer = setTimeout(() => { const l = (D.blog.link || "").trim(); if (/^https?:\/\/[^/]+\/.+/.test(l) && l !== blogLast) pullBlog(); }, 800);
+  }
+  async function pullBlog(force) {
+    const link = (D.blog.link || "").trim(), st = $("blog-status"); st.style.color = "";
+    let u; try { u = new URL(link); } catch (e) { st.textContent = "Paste the full link to the blog post first."; st.style.color = "var(--err)"; return; }
+    blogLast = link; st.textContent = "Reading the post…";
+    let title = "", excerpt = "", image = "";
+    try {
+      const slug = u.pathname.split("/").filter(Boolean).pop() || "";
+      const r = await fetch(u.origin + "/wp-json/wp/v2/posts?_embed=wp:featuredmedia&slug=" + encodeURIComponent(slug));
+      if (r.ok) {
+        const arr = await r.json(), post = Array.isArray(arr) && arr[0];
+        if (post) {
+          title = plain(post.title && post.title.rendered);
+          excerpt = plain(post.excerpt && post.excerpt.rendered);
+          const m = post._embedded && post._embedded["wp:featuredmedia"] && post._embedded["wp:featuredmedia"][0];
+          if (m) image = (m.media_details && m.media_details.sizes && (m.media_details.sizes.large || {}).source_url) || m.source_url || "";
+          if (!image && post.jetpack_featured_media_url) image = post.jetpack_featured_media_url;
+        }
+      }
+    } catch (e) {}
+    if (!image || !title) {
+      try {
+        const r2 = await fetch(u.origin + "/wp-json/oembed/1.0/embed?url=" + encodeURIComponent(link));
+        if (r2.ok) { const j = await r2.json(); title = title || plain(j.title); image = image || j.thumbnail_url || ""; }
+      } catch (e) {}
+    }
+    if ((D.blog.link || "").trim() !== link) return;
+    if (!title && !image) {
+      blogLast = "";
+      st.textContent = "Couldn't read that post automatically. Check the link, or fill in the title and upload the image yourself.";
+      st.style.color = "var(--err)"; return;
+    }
+    const filled = [];
+    const newPost = D.blog.filledFor !== link;
+    const mayReplace = (cur, auto) => force || newPost || !cur || cur === auto;
+    if (title && mayReplace(D.blog.title, D.blog.autoTitle)) { D.blog.title = title; D.blog.autoTitle = title; $("f-btitle").value = title; filled.push("title"); }
+    if (excerpt && mayReplace(D.blog.body, D.blog.autoBody)) { D.blog.body = excerpt; D.blog.autoBody = excerpt; $("f-bbody").value = excerpt; filled.push("excerpt"); }
+    let res = { copied: false };
+    if (image) {
+      res = await keepInCloudinary(image, "Blog: " + (title || link), st);
+      if ((D.blog.link || "").trim() !== link) return;
+      D.blog.image = res.url; filled.unshift("image");
+      imageField($("f-bimg"), "Blog image", () => D.blog.image, (v) => D.blog.image = v, "blog");
+    }
+    D.blog.filledFor = link;
+    save();
+    const list = filled.length ? filled.join(", ").replace(/, ([^,]*)$/, " and $1") : "nothing new";
+    okMsg(st, (filled.length ? "Added the " + list + " from the post." : "")+ (filled.length < 3 && (title || excerpt) && !force && !newPost ? " Your own title or excerpt was kept; click Get from post to replace it." : "") + (!image ? " This post has no featured image, so upload one below." : ""), res);
+  }
+  $("blog-pull").addEventListener("click", () => { blogLast = ""; pullBlog(true); });
+
+  /* ---------- Bind simple fields ---------- */
+  function bind(id, get, set) { const el = $(id); el.value = get() || ""; el.oninput = () => { set(el.value); save(); }; }
+  function bindAll() {
+    bind("f-date", () => D.date, (v) => D.date = v);
+    bind("f-pre", () => D.pre, (v) => D.pre = v);
+    bind("f-prayer", () => D.prayer, (v) => D.prayer = v);
+    bind("f-vlink", () => D.video.link, (v) => { D.video.link = v.trim(); scheduleVimeo(); });
+    imageField($("f-vimg"), "Video thumbnail image", () => D.video.image, (v) => D.video.image = v, "video");
+    bind("f-btitle", () => D.blog.title, (v) => D.blog.title = v);
+    bind("f-blink", () => D.blog.link, (v) => { D.blog.link = v.trim(); scheduleBlog(); });
+    bind("f-bbody", () => D.blog.body, (v) => D.blog.body = v);
+    imageField($("f-bimg"), "Blog image", () => D.blog.image, (v) => D.blog.image = v, "blog");
+    imageField($("f-logo"), "Header logo", () => D.logo, (v) => D.logo = v, "logo");
+    bind("f-wlink", () => D.watch.link, (v) => D.watch.link = v.trim());
+    bind("f-wtext", () => D.watch.text, (v) => D.watch.text = v);
+    bind("f-wtitle", () => D.watch.title, (v) => D.watch.title = v);
+    bind("f-glink", () => D.give.link, (v) => D.give.link = v.trim());
+    bind("f-gtext", () => D.give.text, (v) => D.give.text = v);
+    bind("f-gtitle", () => D.give.title, (v) => D.give.title = v);
+    imageField($("f-flogo"), "Footer logo", () => D.footerLogo, (v) => D.footerLogo = v, "flogo");
+    bind("f-addr", () => D.addr, (v) => D.addr = v);
+    bind("f-unsub", () => D.unsub, (v) => D.unsub = v.trim());
+    renderGlance(); renderQuick(); renderSections();
+  }
+  function renderGlance() {
+    const g = $("glance"); g.innerHTML = "";
+    while (D.glance.length < 4) D.glance.push({ when: "", what: "" });
+    D.glance = D.glance.slice(0, 4);
+    const ph = [["Wed · 4:45 PM", "Fellowship Meal"], ["Sat, Oct 31 · 6 PM", "Trunk or Treat"], ["Sun, Nov 1", "Harvest Day"], ["Sun, Nov 8 · 10:30 AM", "Baptism Sunday"]];
+    D.glance.forEach((x, i) => {
+      const card = document.createElement("div"); card.className = "section-card glance-card";
+      const top = document.createElement("div"); top.className = "top";
+      const nm = document.createElement("strong");
+      const setName = () => { nm.textContent = "Item " + (i + 1) + (x.what ? ": " + x.what : " (empty, won't show)"); card.classList.toggle("is-empty", !x.what && !x.when); };
+      const clr = document.createElement("button"); clr.type = "button"; clr.className = "icon"; clr.textContent = "Clear";
+      top.append(nm, clr);
+      const row = document.createElement("div"); row.className = "glance-row";
+      const l1 = document.createElement("label"); l1.htmlFor = "gw" + i; l1.textContent = "Day & time";
+      const a = document.createElement("input"); a.type = "text"; a.id = "gw" + i; a.value = x.when; a.placeholder = "e.g. " + ph[i][0];
+      a.oninput = () => { x.when = a.value; setName(); save(); }; l1.appendChild(a);
+      const l2 = document.createElement("label"); l2.htmlFor = "gt" + i; l2.textContent = "Event";
+      const b = document.createElement("input"); b.type = "text"; b.id = "gt" + i; b.value = x.what; b.placeholder = "e.g. " + ph[i][1];
+      b.oninput = () => { x.what = b.value; setName(); save(); }; l2.appendChild(b);
+      clr.onclick = () => { x.when = ""; x.what = ""; a.value = ""; b.value = ""; setName(); save(); };
+      row.append(l1, l2); card.append(top, row); setName(); g.appendChild(card);
+    });
+  }
+  function renderQuick() {
+    const q = $("quick"); q.innerHTML = "";
+    D.quick.forEach((x, i) => {
+      const row = document.createElement("div"); row.className = "row";
+      const l1 = document.createElement("label"); l1.htmlFor = "ql" + i; l1.textContent = "Label";
+      const a = document.createElement("input"); a.type = "text"; a.id = "ql" + i; a.value = x.label; a.oninput = () => { x.label = a.value; save(); }; l1.appendChild(a);
+      const l2 = document.createElement("label"); l2.htmlFor = "qu" + i; l2.textContent = "Link";
+      const b = document.createElement("input"); b.type = "url"; b.id = "qu" + i; b.value = x.link; b.oninput = () => { x.link = b.value.trim(); save(); }; l2.appendChild(b);
+      const del = document.createElement("button"); del.type = "button"; del.className = "icon"; del.textContent = "Remove";
+      del.onclick = () => { D.quick.splice(i, 1); renderQuick(); save(); };
+      row.append(l1, l2, del); q.appendChild(row);
+    });
+    const add = document.createElement("button"); add.type = "button"; add.className = "ghost small"; add.textContent = "Add quick link"; add.style.justifySelf = "start";
+    const colors = ["#3D4656", "#7E846A", "#8A3E2B", "#B8742A"];
+    add.onclick = () => { D.quick.push({ label: "", link: "", color: colors[D.quick.length % colors.length] }); renderQuick(); save(); };
+    q.appendChild(add);
+  }
+  function renderSections() {
+    const box = $("sections"); box.innerHTML = "";
+    if (!D.sections.length) { const e = document.createElement("div"); e.className = "empty"; e.textContent = "No announcements yet. Add one to get started."; box.appendChild(e); }
+    D.sections.forEach((s, i) => {
+      const c = document.createElement("div"); c.className = "section-card";
+      const top = document.createElement("div"); top.className = "top";
+      const nm = document.createElement("strong"); nm.textContent = (i + 1) + ". " + (s.title || "Untitled announcement");
+      const tools = document.createElement("div"); tools.className = "tools";
+      const mk = (txt, fn, cls, dis) => { const b = document.createElement("button"); b.type = "button"; b.className = cls || "icon"; b.textContent = txt; b.disabled = !!dis; b.onclick = fn; return b; };
+      tools.append(
+        mk("↑ Up", () => { [D.sections[i - 1], D.sections[i]] = [D.sections[i], D.sections[i - 1]]; renderSections(); save(); }, "icon", i === 0),
+        mk("↓ Down", () => { [D.sections[i + 1], D.sections[i]] = [D.sections[i], D.sections[i + 1]]; renderSections(); save(); }, "icon", i === D.sections.length - 1),
+        mk("Delete", () => {
+          tools.innerHTML = ""; const cf = document.createElement("span"); cf.className = "confirm"; cf.textContent = "Delete this announcement?";
+          cf.append(mk("Delete", () => { D.sections.splice(i, 1); renderSections(); save(); }, "danger small"), mk("Keep", () => renderSections(), "ghost small"));
+          tools.appendChild(cf);
+        }, "danger small"));
+      top.append(nm, tools);
+
+      const field = (lbl, key, multi, ph) => {
+        const l = document.createElement("label"); l.htmlFor = "s" + i + key; l.textContent = lbl;
+        const el = document.createElement(multi ? "textarea" : "input"); if (!multi) el.type = key === "link" ? "url" : "text";
+        el.id = "s" + i + key; el.value = s[key] || ""; if (ph) el.placeholder = ph; if (multi) el.rows = 3;
+        el.oninput = () => { s[key] = el.value; if (key === "title") nm.textContent = (i + 1) + ". " + (el.value || "Untitled announcement"); save(); };
+        l.appendChild(el); return l;
+      };
+      const g1 = document.createElement("div"); g1.className = "grid2";
+      g1.append(field("Title", "title", false, "e.g. Baptism Sunday"), field("Small line above title", "eyebrow", false, "e.g. Sunday, Nov 8 · 10:30 AM"));
+      const body = field("Text (blank line = new paragraph)", "body", true);
+      const imgBox = document.createElement("div");
+      imageField(imgBox, "Image", () => s.image, (v) => s.image = v, "sec" + i);
+      const g2 = document.createElement("div"); g2.className = "grid2";
+      g2.append(field("Button text (optional)", "button", false, "e.g. Sign Up"), field("Button / image link", "link", false, "https://..."));
+      const sl = document.createElement("label"); sl.htmlFor = "s" + i + "style"; sl.textContent = "Style";
+      const sel = document.createElement("select"); sel.id = "s" + i + "style";
+      sel.innerHTML = '<option value="standard">Standard</option><option value="highlight">Highlighted (dark box)</option>';
+      sel.value = s.style || "standard"; sel.onchange = () => { s.style = sel.value; save(); }; sl.appendChild(sel); sl.style.maxWidth = "260px";
+      c.append(top, g1, body, imgBox, g2, sl);
+      box.appendChild(c);
+    });
+  }
+  $("add-sec").addEventListener("click", () => {
+    D.sections.push({ style: "standard", eyebrow: "", title: "", body: "", image: "", button: "", link: "" });
+    renderSections(); save();
+    const cards = $("sections").querySelectorAll(".section-card"); const last = cards[cards.length - 1];
+    last.scrollIntoView({ behavior: "smooth", block: "center" }); last.querySelector("input").focus({ preventScroll: true });
+  });
+
+  /* ---------- Start over ---------- */
+  function confirmIn(area, msg, onYes) {
+    const orig = [...area.childNodes]; area.innerHTML = "";
+    const cf = document.createElement("span"); cf.className = "confirm"; cf.textContent = msg;
+    const y = document.createElement("button"); y.type = "button"; y.className = "danger small"; y.textContent = "Yes, continue";
+    const n = document.createElement("button"); n.type = "button"; n.className = "ghost small"; n.textContent = "Cancel";
+    const restore = () => { area.innerHTML = ""; orig.forEach((o) => area.appendChild(o)); };
+    y.onclick = () => { onYes(); restore(); }; n.onclick = restore;
+    cf.append(y, n); area.appendChild(cf);
+  }
+  $("new-week").addEventListener("click", () => confirmIn($("reset-area"), "Clear this week's date, prayer, video, glance and announcements? Every-week items stay.", () => {
+    D.date = ""; D.pre = ""; D.prayer = ""; D.video = { link: "", image: "" };
+    D.glance = [{ when: "", what: "" }, { when: "", what: "" }, { when: "", what: "" }, { when: "", what: "" }];
+    D.sections = D.sections.map((s) => ({ style: s.style, eyebrow: "", title: "", body: "", image: "", button: "", link: "" }));
+    D.blog = { title: "", link: "", body: "", image: "" };
+    bindAll(); save(); toast("Ready for next week");
+  }));
+  $("reset-sample").addEventListener("click", () => confirmIn($("reset-area"), "Replace everything with the sample newsletter?", () => {
+    D = JSON.parse(JSON.stringify(SAMPLE)); bindAll(); save(); toast("Sample restored");
+  }));
+
+  /* ---------- Export ---------- */
+  $("copy-html").addEventListener("click", () => copy(buildEmail(D), "Email HTML"));
+  $("save-html").addEventListener("click", () => {
+    const blob = new Blob([buildEmail(D)], { type: "text/html" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "fbss-weekly-update-" + (D.date || "draft").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() + ".html";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast("File saved to your downloads");
+  });
+
+  /* ---------- Images tab ---------- */
+  function renderItem(entry, el) {
+    el = el || document.createElement("div"); el.className = "item"; el.innerHTML = "";
+    const im = document.createElement("img"); im.alt = ""; im.src = entry.thumb || entry.preview || "";
+    const meta = document.createElement("div"); meta.className = "meta";
+    const name = document.createElement("div"); name.className = "name"; name.textContent = entry.name; meta.appendChild(name);
+    if (entry.state === "uploading") {
+      const bar = document.createElement("div"); bar.className = "bar"; const i = document.createElement("i"); i.style.width = (entry.pct || 0) + "%"; bar.appendChild(i);
+      const st = document.createElement("div"); st.className = "status"; st.textContent = "Uploading… " + (entry.pct || 0) + "%"; meta.append(bar, st);
+    } else if (entry.state === "error") {
+      const st = document.createElement("div"); st.className = "status err"; st.textContent = entry.error; meta.appendChild(st);
+    } else {
+      const st = document.createElement("div"); st.className = "status ok"; st.textContent = "Ready" + (entry.width ? " · " + entry.width + "×" + entry.height + " original" : "");
+      const url = document.createElement("div"); url.className = "url"; url.textContent = entry.url;
+      const actions = document.createElement("div"); actions.className = "actions";
+      const b1 = document.createElement("button"); b1.type = "button"; b1.textContent = "Copy link"; b1.onclick = () => copy(entry.url, "Link");
+      actions.append(b1); meta.append(st, url, actions);
+    }
+    el.append(im, meta); return el;
+  }
+  function renderHistory() {
+    const list = $("list"); list.querySelectorAll(".item.saved, .empty").forEach((n) => n.remove());
+    if (!history.length && !list.querySelector(".item")) { const e = document.createElement("div"); e.className = "empty"; e.textContent = "Images uploaded by anyone on staff appear here with their links."; list.appendChild(e); return; }
+    history.forEach((h) => { const el = renderItem(Object.assign({ state: "done" }, h)); el.classList.add("saved"); list.appendChild(el); });
+  }
+  function uploadToList(file) {
+    const entry = { name: file.name, state: "uploading", pct: 0, preview: URL.createObjectURL(file) };
+    const el = renderItem(entry); const list = $("list"); list.querySelector(".empty")?.remove(); list.prepend(el);
+    uploadFile(file, (p) => { entry.pct = p; renderItem(entry, el); })
+      .then(() => { el.remove(); toast("Image uploaded"); })
+      .catch((e) => { entry.state = "error"; entry.error = e.message; renderItem(entry, el); });
+  }
+  const drop = $("drop"), fileInput = $("file");
+  drop.addEventListener("click", () => fileInput.click());
+  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener("change", () => { [...fileInput.files].forEach(uploadToList); fileInput.value = ""; });
+  ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => { [...e.dataTransfer.files].filter((f) => f.type.startsWith("image/")).forEach(uploadToList); });
+  $("clear").addEventListener("click", () => {
+    const head = $("clear").parentElement;
+    confirmIn(head, "Clear the list for everyone? The images stay in Cloudinary.", async () => {
+      try { await api("/api/images", { method: "DELETE" }); history = []; $("list").innerHTML = ""; renderHistory(); toast("List cleared · images stay in Cloudinary"); }
+      catch (e) { toast(e.message); }
+    });
+  });
+
+  /* ---------- Tabs ---------- */
+  function show(which, persist) {
+    $("view-build").hidden = which !== "build"; $("view-images").hidden = which !== "images";
+    $("tab-build").setAttribute("aria-selected", which === "build"); $("tab-images").setAttribute("aria-selected", which === "images");
+    if (persist) store.set("fbss.tab", which);
+  }
+  $("tab-build").onclick = () => show("build", true); $("tab-images").onclick = () => show("images", true);
+
+  /* ---------- Sign in & start ---------- */
+  function lock(msg) {
+    $("gate").hidden = false; $("gate-error").textContent = msg || "";
+    $("gate-name").value = who || ""; setTimeout(() => $("gate-pass").focus(), 50);
+  }
+  async function open() {
+    const st = await api("/api/state");
+    applyServer(st);
+    history = st.images || [];
+    if (!started) { started = true; bindAll(); renderHistory(); schedulePreview(); show(store.get("fbss.tab", "build")); }
+    $("gate").hidden = true;
+  }
+  $("gate-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    key = $("gate-pass").value; who = $("gate-name").value.trim();
+    $("gate-submit").disabled = true; $("gate-error").textContent = "";
+    try { await open(); store.set("fbss.key", key); store.set("fbss.name", who); $("gate-pass").value = ""; if (dirty) push(); }
+    catch (err) { $("gate-error").textContent = err.message; }
+    finally { $("gate-submit").disabled = false; }
+  });
+  (async () => {
+    try {
+      const ping = await api("/api/ping");
+      cloudReady = !!ping.cloudinary;
+      $("cloud-status").textContent = cloudReady ? "Connected to Cloudinary" + (ping.cloudName ? " (" + ping.cloudName + ")" : "") + ". Everyone's uploads go to the same account." : "Cloudinary isn't connected yet. Add the Cloudinary settings in Netlify's environment variables.";
+      $("cloud-status").style.color = cloudReady ? "var(--ok)" : "var(--err)";
+      if (!ping.passwordSet) { lock("The studio password hasn't been set up yet. Add STUDIO_PASSWORD in Netlify, then redeploy."); return; }
+    } catch (e) {
+      lock("Couldn't reach the studio server. Check your internet connection and reload the page."); return;
+    }
+    if (!key) { lock(""); return; }
+    try { await open(); } catch (e) { lock(e instanceof AuthError ? "" : e.message); }
+  })();
+})();
+</script>
+</body>
+</html>
