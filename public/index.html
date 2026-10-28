@@ -668,31 +668,18 @@ ${d.unsub ? '<p style="margin:12px 0 0;font-size:12px;"><a href="' + esc(d.unsub
     const link = (D.blog.link || "").trim(), st = $("blog-status"); st.style.color = "";
     let u; try { u = new URL(link); } catch (e) { st.textContent = "Paste the full link to the blog post first."; st.style.color = "var(--err)"; return; }
     blogLast = link; st.textContent = "Reading the post…";
-    let title = "", excerpt = "", image = "";
+    let title = "", excerpt = "", image = "", failMsg = "";
     try {
-      const slug = u.pathname.split("/").filter(Boolean).pop() || "";
-      const r = await fetch(u.origin + "/wp-json/wp/v2/posts?_embed=wp:featuredmedia&slug=" + encodeURIComponent(slug));
-      if (r.ok) {
-        const arr = await r.json(), post = Array.isArray(arr) && arr[0];
-        if (post) {
-          title = plain(post.title && post.title.rendered);
-          excerpt = plain(post.excerpt && post.excerpt.rendered);
-          const m = post._embedded && post._embedded["wp:featuredmedia"] && post._embedded["wp:featuredmedia"][0];
-          if (m) image = (m.media_details && m.media_details.sizes && (m.media_details.sizes.large || {}).source_url) || m.source_url || "";
-          if (!image && post.jetpack_featured_media_url) image = post.jetpack_featured_media_url;
-        }
-      }
-    } catch (e) {}
-    if (!image || !title) {
-      try {
-        const r2 = await fetch(u.origin + "/wp-json/oembed/1.0/embed?url=" + encodeURIComponent(link));
-        if (r2.ok) { const j = await r2.json(); title = title || plain(j.title); image = image || j.thumbnail_url || ""; }
-      } catch (e) {}
+      const r = await api("/api/preview?url=" + encodeURIComponent(link));
+      title = r.title || ""; excerpt = r.excerpt || ""; image = r.image || "";
+    } catch (e) {
+      if (e instanceof AuthError) { lock(e.message); return; }
+      failMsg = e.message;
     }
     if ((D.blog.link || "").trim() !== link) return;
     if (!title && !image) {
       blogLast = "";
-      st.textContent = "Couldn't read that post automatically. Check the link, or fill in the title and upload the image yourself.";
+      st.textContent = failMsg || "Couldn't read that post automatically. Check the link, or fill in the title and upload the image yourself.";
       st.style.color = "var(--err)"; return;
     }
     const filled = [];
