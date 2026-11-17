@@ -59,6 +59,8 @@ code { font-family:var(--mono); font-size:.9em; background:var(--bg); padding:1p
 .preview-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .section-card { border:1px solid var(--line); border-radius:8px; padding:14px; display:grid; gap:10px; background:var(--bg); }
 .section-card .top { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+.caltag { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--sage); border:1px solid var(--sage); vertical-align:2px; }
+.calnote { font-size:12.5px; color:var(--muted); margin:-4px 0 0; }
 .section-card .top strong { font-size:14px; overflow-wrap:anywhere; }
 .section-card .tools { display:flex; gap:4px; }
 .section-card input, .section-card textarea, .section-card select { background:var(--surface); }
@@ -782,13 +784,14 @@ ${d.unsub ? '<p style="margin:12px 0 0;font-size:12px;"><a href="' + esc(d.unsub
           cf.append(mk("Delete", () => { D.sections.splice(i, 1); renderSections(); save(); }, "danger small"), mk("Keep", () => renderSections(), "ghost small"));
           tools.appendChild(cf);
         }, "danger small"));
+      if (s.calId) { const tg = document.createElement("span"); tg.className = "caltag"; tg.textContent = "From the calendar"; nm.appendChild(tg); }
       top.append(nm, tools);
 
       const field = (lbl, key, multi, ph) => {
         const l = document.createElement("label"); l.htmlFor = "s" + i + key; l.textContent = lbl;
         const el = document.createElement(multi ? "textarea" : "input"); if (!multi) el.type = key === "link" ? "url" : "text";
         el.id = "s" + i + key; el.value = s[key] || ""; if (ph) el.placeholder = ph; if (multi) el.rows = 3;
-        el.oninput = () => { s[key] = el.value; if (key === "title") nm.textContent = (i + 1) + ". " + (el.value || "Untitled announcement"); save(); };
+        el.oninput = () => { s[key] = el.value; if (key === "title") { nm.firstChild.textContent = (i + 1) + ". " + (el.value || "Untitled announcement"); } save(); };
         l.appendChild(el); return l;
       };
       const g1 = document.createElement("div"); g1.className = "grid2";
@@ -802,7 +805,9 @@ ${d.unsub ? '<p style="margin:12px 0 0;font-size:12px;"><a href="' + esc(d.unsub
       const sel = document.createElement("select"); sel.id = "s" + i + "style";
       sel.innerHTML = '<option value="standard">Standard</option><option value="highlight">Highlighted (dark box)</option>';
       sel.value = s.style || "standard"; sel.onchange = () => { s.style = sel.value; save(); }; sl.appendChild(sel); sl.style.maxWidth = "260px";
-      c.append(top, g1, body, imgBox, g2, sl);
+      c.append(top);
+      if (s.calId) { const n = document.createElement("p"); n.className = "calnote"; n.textContent = (s.calSnap && ["eyebrow","title","body","image","button","link"].every((f) => (s[f] || "") === (s.calSnap[f] || ""))) ? "Added from the communication calendar and kept up to date with it. Edit anything here and it stops updating." : "Added from the communication calendar. You've edited it, so the calendar won't change it."; c.append(n); }
+      c.append(g1, body, imgBox, g2, sl);
       box.appendChild(c);
     });
   }

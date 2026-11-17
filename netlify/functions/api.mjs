@@ -8,6 +8,7 @@
 //   CLOUDINARY_API_KEY     from Cloudinary: Settings > API Keys
 //   CLOUDINARY_API_SECRET  from Cloudinary: Settings > API Keys
 //   CLOUDINARY_FOLDER      optional, defaults to "newsletter"
+//   IMPORT_KEY             shared secret the Communication Calendar uses to add this week's items
 
 import { getStore } from "@netlify/blobs";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -108,6 +109,48 @@ export async function preview(link, get = getWithTimeout) {
   return { status: 200, body: out };
 }
 
+/* ---------- Calendar import ----------
+   Merges the calendar's items into the shared draft. Each imported section remembers its calendar id
+   (calId) and what the calendar last sent (calSnap). If a section still matches calSnap, nobody has
+   edited it, so it follows the calendar (updated, or removed when the item leaves this week). Once
+   someone edits it here, the calendar leaves it alone. New items fill blank sections first (left by
+   "New week"), then go at the end. Returns { next, summary }; next is null when nothing changed. */
+const FIELDS = ["eyebrow", "title", "body", "image", "button", "link"];
+const pick = (o) => Object.fromEntries(FIELDS.map((f) => [f, String((o && o[f]) || "").slice(0, 6000)]));
+const same = (s, snap) => !!snap && FIELDS.every((f) => (s[f] || "") === (snap[f] || ""));
+const blank = (s) => !s.calId && FIELDS.every((f) => !s[f]);
+export function importItems(doc, items) {
+  if (!doc || !doc.draft) return { next: null, summary: { added: 0, updated: 0, removed: 0, kept: 0, skipped: "Open the newsletter studio once to start the shared draft." } };
+  const d = JSON.parse(JSON.stringify(doc.draft));
+  d.sections = Array.isArray(d.sections) ? d.sections : [];
+  const list = items.filter((i) => i && typeof i.calId === "string" && i.calId);
+  const ids = new Set(list.map((i) => i.calId));
+  let added = 0, updated = 0, removed = 0, kept = 0;
+  d.sections = d.sections.filter((s) => {
+    if (!s.calId || ids.has(s.calId)) return true;
+    if (same(s, s.calSnap)) { removed++; return false; }
+    delete s.calId; delete s.calSnap; kept++;   // edited by staff: keep it as an ordinary section
+    return true;
+  });
+  for (const it of list) {
+    const f = pick(it), s = d.sections.find((x) => x.calId === it.calId);
+    if (s) {
+      if (!same(s, s.calSnap)) { kept++; continue; }
+      if (!same(s, f)) { Object.assign(s, f); s.calSnap = f; updated++; }
+    } else {
+      const b = d.sections.find(blank);
+      if (b) Object.assign(b, f, { calId: it.calId, calSnap: f });
+      else d.sections.push({ style: "standard", ...f, calId: it.calId, calSnap: f });
+      added++;
+    }
+  }
+  const changed = added || updated || removed;
+  return {
+    next: changed ? { draft: d, version: Number(doc.version || 0) + 1, savedAt: new Date().toISOString(), savedBy: "Communication Calendar" } : null,
+    summary: { added, updated, removed, kept },
+  };
+}
+
 export async function handle(req, store) {
   const url = new URL(req.url);
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
@@ -115,6 +158,20 @@ export async function handle(req, store) {
   if (route === "ping") {
     return json({ ok: true, passwordSet: !!env("STUDIO_PASSWORD"), cloudinary: !!(env("CLOUDINARY_CLOUD_NAME") && env("CLOUDINARY_API_KEY") && env("CLOUDINARY_API_SECRET")), cloudName: env("CLOUDINARY_CLOUD_NAME") || null });
   }
+
+  /* ---------- Import from the FBSS Communication Calendar (uses IMPORT_KEY, not the staff password) ---------- */
+  if (route === "import" && req.method === "POST") {
+    const want = env("IMPORT_KEY");
+    if (!want) return json({ error: "IMPORT_KEY isn't set up in the newsletter studio's Netlify environment variables." }, 503);
+    const got = req.headers.get("x-import-key") || "";
+    const a = Buffer.from(want), b = Buffer.from(got);
+    if (!(a.length === b.length && timingSafeEqual(a, b))) return json({ error: "Wrong import key." }, 401);
+    let body; try { body = await req.json(); } catch (e) { return json({ error: "Bad request." }, 400); }
+    const r = importItems(await store.get("draft", { type: "json" }), Array.isArray(body && body.items) ? body.items.slice(0, 50) : []);
+    if (r.next) await store.setJSON("draft", r.next);
+    return json(r.summary);
+  }
+
   if (!env("STUDIO_PASSWORD")) return json({ error: "The studio password hasn't been set up yet. Add STUDIO_PASSWORD in Netlify's environment variables, then redeploy." }, 503);
   if (!passwordOk(req)) return json({ error: "That password isn't right." }, 401);
 
