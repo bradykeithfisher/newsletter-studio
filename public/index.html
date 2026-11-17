@@ -831,6 +831,9 @@ ${d.unsub ? '<p style="margin:12px 0 0;font-size:12px;"><a href="' + esc(d.unsub
   $("new-week").addEventListener("click", () => confirmIn($("reset-area"), "Clear this week's date, prayer, video, glance and announcements? Every-week items stay.", () => {
     D.date = ""; D.pre = ""; D.prayer = ""; D.video = { link: "", image: "" };
     D.glance = [{ when: "", what: "" }, { when: "", what: "" }, { when: "", what: "" }, { when: "", what: "" }];
+    // Remember which calendar items went out this week so the calendar doesn't add them again.
+    const went = D.sections.map((s) => s.calDest || s.calId).filter(Boolean);
+    D.calDone = [...went, ...(Array.isArray(D.calDone) ? D.calDone : [])].slice(0, 300);
     D.sections = D.sections.map((s) => ({ style: s.style, eyebrow: "", title: "", body: "", image: "", button: "", link: "" }));
     D.blog = { title: "", link: "", body: "", image: "" };
     bindAll(); save(); toast("Ready for next week");

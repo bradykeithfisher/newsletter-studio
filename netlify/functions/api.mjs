@@ -110,11 +110,15 @@ export async function preview(link, get = getWithTimeout) {
 }
 
 /* ---------- Calendar import ----------
-   Merges the calendar's items into the shared draft. Each imported section remembers its calendar id
-   (calId) and what the calendar last sent (calSnap). If a section still matches calSnap, nobody has
-   edited it, so it follows the calendar (updated, or removed when the item leaves this week). Once
-   someone edits it here, the calendar leaves it alone. New items fill blank sections first (left by
-   "New week"), then go at the end. Returns { next, summary }; next is null when nothing changed. */
+   Merges the calendar's items into the shared draft, with one section per event.
+   The calendar sends one item per Weekly Update destination (calId), with group = the campaign. When a
+   campaign has more than one Weekly Update in range, the earliest one that hasn't gone out yet is used.
+   "Start next week" records which ones went out (draft.calDone) so they aren't added again.
+   Each section remembers its group (calId), the destination shown (calDest) and what the calendar last sent
+   (calSnap). A section that still matches calSnap follows the calendar (updated, or removed when the event
+   leaves the week). Once someone edits it here, the calendar leaves it alone. Duplicate sections for the same
+   event are merged: extra copies nobody edited are removed. New items fill blank sections first, then go at
+   the end. Returns { next, summary }; next is null when nothing changed. */
 const FIELDS = ["eyebrow", "title", "body", "image", "button", "link"];
 const pick = (o) => Object.fromEntries(FIELDS.map((f) => [f, String((o && o[f]) || "").slice(0, 6000)]));
 const same = (s, snap) => !!snap && FIELDS.every((f) => (s[f] || "") === (snap[f] || ""));
@@ -123,31 +127,52 @@ export function importItems(doc, items) {
   if (!doc || !doc.draft) return { next: null, summary: { added: 0, updated: 0, removed: 0, kept: 0, skipped: "Open the newsletter studio once to start the shared draft." } };
   const d = JSON.parse(JSON.stringify(doc.draft));
   d.sections = Array.isArray(d.sections) ? d.sections : [];
-  const list = items.filter((i) => i && typeof i.calId === "string" && i.calId);
-  const ids = new Set(list.map((i) => i.calId));
-  let added = 0, updated = 0, removed = 0, kept = 0;
+  const done = new Set(Array.isArray(d.calDone) ? d.calDone : []);
+  const valid = items.filter((i) => i && typeof i.calId === "string" && i.calId);
+  // Group by event; older calendars send no group, so each item is its own group.
+  const groups = new Map();
+  for (const it of valid) { const g = String(it.group || it.calId); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(it); }
+  const chosen = [];   // [group, item, every id that belongs to this event]
+  for (const [g, list] of groups) {
+    list.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    const it = list.find((x) => !done.has(x.calId));
+    if (it) chosen.push([g, it, [g, ...list.map((x) => x.calId)]]);
+  }
+  const owner = new Map();   // any id -> group
+  for (const [g, , ids] of chosen) for (const id of ids) owner.set(id, g);
+  let added = 0, updated = 0, removed = 0, kept = 0, merged = 0, relinked = 0;
+  // Sections whose event is no longer coming from the calendar.
   d.sections = d.sections.filter((s) => {
-    if (!s.calId || ids.has(s.calId)) return true;
+    if (!s.calId || owner.has(s.calId)) return true;
     if (same(s, s.calSnap)) { removed++; return false; }
-    delete s.calId; delete s.calSnap; kept++;   // edited by staff: keep it as an ordinary section
+    delete s.calId; delete s.calSnap; delete s.calDest; kept++;   // edited by staff: keep it as an ordinary section
     return true;
   });
-  for (const it of list) {
-    const f = pick(it), s = d.sections.find((x) => x.calId === it.calId);
+  for (const [g, it] of chosen) {
+    const f = pick(it);
+    const matches = d.sections.filter((x) => x.calId && owner.get(x.calId) === g);
+    // Prefer a section someone edited, so their work is what stays.
+    const s = matches.find((x) => !same(x, x.calSnap)) || matches[0];
+    for (const extra of matches) {
+      if (extra === s) continue;
+      if (same(extra, extra.calSnap)) { d.sections.splice(d.sections.indexOf(extra), 1); merged++; }
+      else { delete extra.calId; delete extra.calSnap; delete extra.calDest; kept++; }
+    }
     if (s) {
+      if (s.calId !== g || s.calDest !== it.calId) { s.calId = g; s.calDest = it.calId; relinked++; }
       if (!same(s, s.calSnap)) { kept++; continue; }
       if (!same(s, f)) { Object.assign(s, f); s.calSnap = f; updated++; }
     } else {
       const b = d.sections.find(blank);
-      if (b) Object.assign(b, f, { calId: it.calId, calSnap: f });
-      else d.sections.push({ style: "standard", ...f, calId: it.calId, calSnap: f });
+      if (b) Object.assign(b, f, { calId: g, calDest: it.calId, calSnap: f });
+      else d.sections.push({ style: "standard", ...f, calId: g, calDest: it.calId, calSnap: f });
       added++;
     }
   }
-  const changed = added || updated || removed;
+  const changed = added || updated || removed || merged || relinked;
   return {
     next: changed ? { draft: d, version: Number(doc.version || 0) + 1, savedAt: new Date().toISOString(), savedBy: "Communication Calendar" } : null,
-    summary: { added, updated, removed, kept },
+    summary: { added, updated, removed: removed + merged, kept },
   };
 }
 
