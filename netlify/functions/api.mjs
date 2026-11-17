@@ -151,6 +151,44 @@ export function importItems(doc, items) {
   };
 }
 
+/* Calendar photos are copied into Cloudinary so the email gets a smaller, lasting copy.
+   calimages remembers each calendar address and its Cloudinary copy, so a photo is only uploaded once.
+   If a copy fails, the calendar's address is used for now and the next sync tries again. */
+const isCloud = (u) => /^https:\/\/res\.cloudinary\.com\//i.test(u);
+const emailUrl = (u) => u.replace("/image/upload/", "/image/upload/w_1200,c_limit,q_auto/");
+const thumbUrl = (u) => u.replace("/image/upload/", "/image/upload/w_200,h_150,c_fill,q_auto/");
+export async function copyToCloudinary(src, timeoutMs = 6500) {
+  const cloudName = env("CLOUDINARY_CLOUD_NAME"), apiKey = env("CLOUDINARY_API_KEY"), secret = env("CLOUDINARY_API_SECRET");
+  if (!cloudName || !apiKey || !secret) return null;
+  const params = { folder: env("CLOUDINARY_FOLDER") || "newsletter", timestamp: Math.floor(Date.now() / 1000) };
+  const fd = new FormData();
+  fd.append("file", src); fd.append("api_key", apiKey); fd.append("folder", params.folder);
+  fd.append("timestamp", String(params.timestamp)); fd.append("signature", cloudinarySignature(params, secret));
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch("https://api.cloudinary.com/v1_1/" + encodeURIComponent(cloudName) + "/image/upload", { method: "POST", body: fd, signal: ctl.signal });
+    const j = await r.json().catch(() => ({}));
+    return r.ok && j.secure_url ? j : null;
+  } catch (e) { return null; } finally { clearTimeout(t); }
+}
+export async function cloudImages(items, store, upload = copyToCloudinary) {
+  const map = (await store.get("calimages", { type: "json" })) || {};
+  const need = [...new Set(items.map((i) => String(i.image || "")).filter((u) => /^https?:\/\//i.test(u) && !isCloud(u) && !map[u]))];
+  const added = [];
+  await Promise.all(need.map(async (src) => {
+    const r = await upload(src);
+    if (r) { map[src] = emailUrl(r.secure_url); const it = items.find((i) => i.image === src);
+      added.push({ name: "Calendar: " + String((it && it.title) || "photo").slice(0, 150), url: map[src], thumb: thumbUrl(r.secure_url), width: r.width || null, height: r.height || null, at: Date.now() }); }
+  }));
+  if (added.length) {
+    const keys = Object.keys(map); for (const k of keys.slice(0, Math.max(0, keys.length - 500))) delete map[k];
+    await store.setJSON("calimages", map);
+    const list = (await store.get("images", { type: "json" })) || [];
+    await store.setJSON("images", [...added, ...list].slice(0, 300));
+  }
+  return { items: items.map((i) => (map[i.image] ? { ...i, image: map[i.image] } : i)), copied: added.length, failed: need.length - added.length };
+}
+
 export async function handle(req, store) {
   const url = new URL(req.url);
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
@@ -167,9 +205,12 @@ export async function handle(req, store) {
     const a = Buffer.from(want), b = Buffer.from(got);
     if (!(a.length === b.length && timingSafeEqual(a, b))) return json({ error: "Wrong import key." }, 401);
     let body; try { body = await req.json(); } catch (e) { return json({ error: "Bad request." }, 400); }
-    const r = importItems(await store.get("draft", { type: "json" }), Array.isArray(body && body.items) ? body.items.slice(0, 50) : []);
+    const doc = await store.get("draft", { type: "json" });
+    let items = Array.isArray(body && body.items) ? body.items.slice(0, 50) : [], photos = { copied: 0, failed: 0 };
+    if (doc && doc.draft) { const c = await cloudImages(items, store); items = c.items; photos = { copied: c.copied, failed: c.failed }; }
+    const r = importItems(doc, items);
     if (r.next) await store.setJSON("draft", r.next);
-    return json(r.summary);
+    return json({ ...r.summary, photosCopied: photos.copied, photosFailed: photos.failed });
   }
 
   if (!env("STUDIO_PASSWORD")) return json({ error: "The studio password hasn't been set up yet. Add STUDIO_PASSWORD in Netlify's environment variables, then redeploy." }, 503);

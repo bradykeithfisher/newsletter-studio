@@ -26,6 +26,10 @@ each Weekly Update email destination going out in the next week. Each one become
 **From the calendar**: the subject line becomes the title, the event date, time and place become the small line above it,
 and the copy, first photo and campaign link are added.
 
+Photos from the calendar are copied into Cloudinary when they arrive, so the email gets a smaller copy (up to 1200px wide)
+that keeps working even if the photo is later deleted from the calendar. Each photo is copied once and appears in the
+image list as "Calendar: …". If a copy fails, the calendar's link is used until the next sync tries again.
+
 - New items fill blank announcement sections first (the ones left after **New week**), then go at the end.
 - Sections nobody has edited stay in step with the calendar, and drop off when the item leaves the week.
 - Once anyone edits a section here, the calendar never changes or removes it.
